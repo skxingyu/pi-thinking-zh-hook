@@ -143,13 +143,93 @@ Hello, what are you working on?
 重申：思考和回复必须用简体中文。严禁英文思考开头。
 ```
 
+## 思考翻译扩展
+
+> **将 assistant 的 thinking/reasoning 内容实时翻译为中文**，以 widget 形式显示在对话下方。
+
+### 功能
+
+- 监听 `message_end` 事件，提取 assistant 消息中的 thinking 文本
+- 调用 LLM API 将英文 thinking 翻译为简体中文
+- 翻译结果以固定 widget 显示，自动覆盖更新，不堆积
+- 30 秒无新翻译自动消失
+- 默认关闭，通过 `/zhtranslate` 命令控制
+
+### 用法
+
+```bash
+/zhtranslate                      # 切换开/关
+/zhtranslate on                   # 开启
+/zhtranslate off                  # 关闭
+/zhtranslate status               # 查看状态
+/zhtranslate model <p/modelId>    # 设置翻译模型（如 sensenova/sensenova-6.7-flash-lite）
+```
+
+### 模型选择建议
+
+翻译任务不需要强推理能力，**建议使用小体量、低参数或免费模型**来节省 token 消耗：
+
+| 类型 | 推荐模型 | 说明 |
+|------|---------|------|
+| 💰 免费 | `opencode/deepseek-v4-flash-free` | OpenCode 提供的免费 DeepSeek V4 Flash |
+| ⚡ 轻量 | `sensenova/sensenova-6.7-flash-lite` | 商汤轻量模型，速度快 |
+| 🎯 非推理 | 任意 `reasoning: false` 的模型 | 纯翻译不需要思考，关闭推理可大幅降低开销 |
+
+> **⚠️ 务必选择小模型或免费模型**。使用旗舰推理模型做翻译会浪费大量 token（思考内容可能很长，每次翻译消耗数千 token 并不划算）。
+
+### 配置示例
+
+在 Pi 的 `settings.json` 中确保翻译模型已配置：
+
+```json
+{
+  "models": [
+    "sensenova/sensenova-6.7-flash-lite"
+  ]
+}
+```
+
+然后在 Pi 中设置：
+
+```bash
+/zhtranslate model sensenova/sensenova-6.7-flash-lite
+```
+
+### 工作原理
+
+```
+assistant 回复
+  │
+  ├─ message_end 事件触发
+  │    └─ 提取 thinking 文本（最多 2000 字符）
+  │
+  ├─ 调用翻译模型 API
+  │    ├─ 使用 OpenAI 兼容接口
+  │    ├─ 设置 reasoning_effort: "none"（禁止推理）
+  │    └─ 使用独立的 AbortController 管理并发
+  │
+  └─ 显示 widget
+       ├─ 固定 key 覆盖写，不堆积
+       ├─ 最多显示 7 行，超出时末尾标注 "有折叠"
+       └─ 30 秒后自动消失 / 新回合自动清除
+```
+
+### 安装
+
+```bash
+cp extensions/thinking-translator.ts ~/.pi/agent/extensions/
+```
+
+重启 pi 或执行 `/reload` 生效。
+
 ## 项目结构
 
 ```
 pi-thinking-zh-hook/
 ├── AGENTS.md                              # L1 基础层
 ├── extensions/
-│   └── chinese-thinking-hook.ts           # 核心扩展（可开关，双层防御）
+│   ├── chinese-thinking-hook.ts           # 核心扩展（可开关，双层防御）
+│   └── thinking-translator.ts             # 思考翻译扩展（将 thinking 译成中文）
 ├── install.ps1                            # 一键安装脚本
 └── README.md
 ```
