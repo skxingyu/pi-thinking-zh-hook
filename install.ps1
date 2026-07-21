@@ -106,8 +106,14 @@ Write-Host "`n📌 下一步:" -ForegroundColor Yellow
 Write-Host "  1. 重启 Pi (或执行 /reload)" -ForegroundColor White
 Write-Host "  2. 开始使用 — 中文思考会自动生效" -ForegroundColor White
 
+Write-Host "`n📌 使用:" -ForegroundColor Yellow
+Write-Host '  扩展默认关闭，需要时输入 /zhthinking 开启' -ForegroundColor White
+Write-Host '  /zhthinking on     — 开启' -ForegroundColor White
+Write-Host '  /zhthinking off    — 关闭' -ForegroundColor White
+Write-Host '  /zhthinking status — 查看状态' -ForegroundColor White
+
 Write-Host "`n📌 验证:" -ForegroundColor Yellow
-Write-Host '  输入 "Hello, what are you working on?"' -ForegroundColor White
+Write-Host '  先输入 /zhthinking on 开启，再输入 "Hello, what are you working on?"' -ForegroundColor White
 Write-Host "  观察 thinking 标签中是否用中文思考" -ForegroundColor White
 
 Write-Host "`n✨ 安装完成!`n" -ForegroundColor Green

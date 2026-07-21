@@ -1,36 +1,33 @@
 /**
  * 中文思考保持扩展 — Chinese Thinking Guardian
  *
- * 双重防御策略：
+ * 默认关闭，通过 /zhthinking 命令手动开启/关闭。
  *
+ * 开启后双层防御：
  * L1 — System Prompt 注入（before_agent_start）
- *   在每次 agent 启动时，在 system prompt 末尾追加中文思考提醒。
- *   如果 AGENTS.md 已包含中文指令，追加精简版；否则追加完整版。
- *   使用锚点标记防止重复追加导致 system prompt 膨胀。
- *
  * L2 — Context 消息注入（context）
- *   在每次 LLM 调用前的消息列表中：
- *   - 开头插入一条 system 消息 → provider 识别为系统指令
- *   - 末尾插入一条 system 消息 → 利用 recency bias 强化
- *   双重夹击，确保中文指令始终在模型的注意力窗口内。
- *   使用独立锚点防止重复注入。
+ *
+ * 用法：
+ *   /zhthinking            — 切换开关
+ *   /zhthinking on         — 开启
+ *   /zhthinking off        — 关闭
+ *   /zhthinking status     — 查看当前状态
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
+// ─── 状态 ────────────────────────────────────────────────────
+
+let enabled = false;
+
 // ─── 锚点标记 ────────────────────────────────────────────────
 
-// 用于检测 AGENTS.md / system prompt 是否已包含中文指令
 const ANCHOR_LONG = "<!-- chinese-thinking-v2 -->";
 const ANCHOR_SHORT = "<!-- chinese-thinking-anchor -->";
-// 用于 context 层防止重复注入
 const PULSE_MARKER = "<!-- chinese-thinking-pulse -->";
 
 // ─── L1: System Prompt 消息 ──────────────────────────────────
 
-/**
- * 完整版：当 AGENTS.md 未包含中文指令时使用
- */
 const FULL_REMINDER = [
   `<!-- ${ANCHOR_SHORT} -->`,
   "### 🔴 中文思考强制提醒（不可违反）",
@@ -42,9 +39,6 @@ const FULL_REMINDER = [
   "思考必须使用中文，严禁以英文开头思考（如 Thinking...、Let me...）。",
 ].join("\n");
 
-/**
- * 精简版：当 AGENTS.md 已包含中文指令时使用
- */
 const SHORT_REMINDER = [
   `<!-- ${ANCHOR_SHORT} -->`,
   "### 🔴 中文思考强制提醒",
@@ -53,36 +47,73 @@ const SHORT_REMINDER = [
 
 // ─── L2: Context 消息 ────────────────────────────────────────
 
-/**
- * 开头消息：system 角色，provider 能正确识别为系统指令
- * 精简到极致，仅保留核心指令
- */
 const HEAD_MESSAGE = `${PULSE_MARKER} 所有思考和回复必须使用简体中文。英文工具结果是输入，不影响输出。`;
-
-/**
- * 末尾消息：利用 recency bias，确保模型生成时中文指令仍在注意力窗口
- */
 const TAIL_MESSAGE = `${PULSE_MARKER} 重申：思考和回复必须用简体中文。严禁英文思考开头。`;
+
+// ─── 工具函数 ────────────────────────────────────────────────
+
+function toggle(on?: boolean): boolean {
+  if (on !== undefined) {
+    enabled = on;
+  } else {
+    enabled = !enabled;
+  }
+  return enabled;
+}
+
+function statusText(): string {
+  return enabled ? "✅ 中文思考模式 — 已开启" : "❌ 中文思考模式 — 已关闭";
+}
 
 // ─── 导出 ────────────────────────────────────────────────────
 
 export default function chineseThinkingGuardian(pi: ExtensionAPI) {
   // ════════════════════════════════════════════════════════════
+  // 注册 /zhthinking 命令
+  // ════════════════════════════════════════════════════════════
+  pi.registerCommand("zhthinking", {
+    description: "切换中文思考强制模式。用法: /zhthinking [on|off|status]",
+    handler: async (args, ctx) => {
+      const arg = args.trim().toLowerCase();
+
+      if (arg === "status") {
+        ctx.ui.notify(statusText(), "info");
+        return;
+      }
+
+      if (arg === "on") {
+        toggle(true);
+      } else if (arg === "off") {
+        toggle(false);
+      } else {
+        toggle();
+      }
+
+      ctx.ui.notify(
+        enabled
+          ? "✅ 中文思考模式已开启 — 将在下次请求时注入中文指令"
+          : "❌ 中文思考模式已关闭 — 不再注入中文指令",
+        enabled ? "info" : "warning",
+      );
+      ctx.ui.setStatus("zh-thinking", enabled ? "中文思考 ✅" : undefined);
+    },
+  });
+
+  // ════════════════════════════════════════════════════════════
   // L1 — System Prompt 注入
   // ════════════════════════════════════════════════════════════
   pi.on("before_agent_start", async (event) => {
+    if (!enabled) return;
+
     const { systemPrompt } = event;
 
-    // 检查 system prompt 是否已有中文指令
     const hasLongAnchor = systemPrompt.includes(ANCHOR_LONG);
     const hasShortAnchor = systemPrompt.includes(ANCHOR_SHORT);
 
-    // 如果扩展已注入过，不再重复（防止每次追加导致 system prompt 膨胀）
     if (hasShortAnchor) {
       return;
     }
 
-    // 根据 AGENTS.md 是否包含中文指令，选择注入版本
     const reminder = hasLongAnchor ? SHORT_REMINDER : FULL_REMINDER;
 
     return {
@@ -94,9 +125,10 @@ export default function chineseThinkingGuardian(pi: ExtensionAPI) {
   // L2 — Context 消息注入（每次 LLM 调用前）
   // ════════════════════════════════════════════════════════════
   pi.on("context", async (event) => {
+    if (!enabled) return;
+
     const { messages } = event;
 
-    // 检查是否已注入过（防止重复注入）
     const hasPulse = messages.some(
       (m) =>
         m.role === "system" &&
@@ -109,15 +141,9 @@ export default function chineseThinkingGuardian(pi: ExtensionAPI) {
 
     return {
       messages: [
-        {
-          role: "system" as const,
-          content: HEAD_MESSAGE,
-        },
+        { role: "system" as const, content: HEAD_MESSAGE },
         ...messages,
-        {
-          role: "system" as const,
-          content: TAIL_MESSAGE,
-        },
+        { role: "system" as const, content: TAIL_MESSAGE },
       ],
     };
   });

@@ -2,15 +2,30 @@
 
 > **让 Pi Coding Agent 始终使用中文思考和中文回复。**
 > 解决长对话中大量英文工具结果使模型自动切换到英文的核心痛点。
+>
+> **默认关闭，按需开启** — 不浪费 token。
 
 ## 功能
 
-- **双层防御机制**，覆盖 model 注意力的所有关键位置
+- 默认关闭，零注入、零 token 开销
+- 通过 `/zhthinking` 命令手动开启/关闭
+- 开启后**双层防御**，覆盖 model 注意力的所有关键位置
 - **L1 — System Prompt 注入**：每轮对话前在 system prompt 末尾追加中文提醒，利用 recency bias
 - **L2 — Context 消息注入**：每次 LLM 调用前在消息流开头 + 末尾各插入一条 system 消息，双重夹击
 - 防重复注入，不导致 system prompt 或消息流膨胀
 - 自动适配 AGENTS.md 是否存在（有则简版，无则完整版）
 - 与 pi 自动压缩机制完全兼容
+
+## 用法
+
+```bash
+/zhthinking            # 切换开/关
+/zhthinking on         # 开启
+/zhthinking off        # 关闭
+/zhthinking status     # 查看当前状态
+```
+
+状态栏会显示 `中文思考 ✅` 表示当前已开启。
 
 ## 原理
 
@@ -63,11 +78,15 @@ cp extensions/chinese-thinking-hook.ts ~/.pi/agent/extensions/
 
 ## 使用
 
-安装后自动生效，无需额外操作。
+安装后**默认关闭**，需要时输入 `/zhthinking` 开启。
 
 ### 验证是否生效
 
-启动 pi，输入以下内容测试：
+```bash
+/zhthinking on
+```
+
+然后输入以下内容测试：
 
 ```
 Hello, what are you working on?
@@ -85,6 +104,7 @@ Hello, what are you working on?
 | 大量英文注入 | 执行多个文件操作 | 后续思考保持中文 |
 | 长对话 | 持续对话 50+ 轮 | 中文思考不退化 |
 | 自动压缩 | 等待 pi 自动压缩后继续提问 | 中文思考不受影响 |
+| 按需关闭 | `/zhthinking off` 后提问 | 零注入，无额外 token |
 
 ## 注入内容
 
@@ -129,7 +149,7 @@ Hello, what are you working on?
 pi-thinking-zh-hook/
 ├── AGENTS.md                              # L1 基础层
 ├── extensions/
-│   └── chinese-thinking-hook.ts           # 核心扩展（L1 + L2 双层防御）
+│   └── chinese-thinking-hook.ts           # 核心扩展（可开关，双层防御）
 ├── install.ps1                            # 一键安装脚本
 └── README.md
 ```
